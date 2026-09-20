@@ -38,6 +38,12 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "unit: dependency-light deterministic tests",
+    "integration: environment-dependent tests that may touch heavier infrastructure",
+    "model_backed: tests that initialize embedding, reranking, or live model-backed components",
+    "live_provider: tests that require external provider credentials or network access",
+]
 
 [tool.ruff]
 line-length = 100

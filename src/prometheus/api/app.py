@@ -3,18 +3,25 @@ FastAPI application exposing Prometheus RAG query and ingestion endpoints.
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 
+from prometheus.llm.base import LLMError
+from prometheus.models.gateway import get_model_gateway
+from prometheus.models.types import ModelGatewayError
 from prometheus.rag.models import RagQueryRequest, RagResult
-from prometheus.rag.pipeline import query_rag
+from prometheus.rag.pipeline import RagPipelineError, query_rag
 from prometheus.retrieval.ingestion import ingest_document
 from prometheus.retrieval.parsers import SUPPORTED_EXTENSIONS
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Prometheus RAG API",
@@ -37,6 +44,18 @@ def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "prometheus-rag"}
 
 
+@app.get("/api/usage/summary")
+def usage_summary() -> dict:
+    """Return aggregate model usage without exposing prompts or provider secrets."""
+    return asdict(get_model_gateway().usage_tracker.get_usage_summary())
+
+
+@app.get("/api/usage/models")
+def usage_models() -> list[dict]:
+    """Return configured pricing entries, if any."""
+    return [asdict(item) for item in get_model_gateway().pricing_registry.models()]
+
+
 @app.post("/api/rag/query", response_model=RagResult)
 def rag_query_endpoint(request: RagQueryRequest) -> RagResult:
     """Query the RAG pipeline with a user question and optional document filter."""
@@ -54,10 +73,29 @@ def rag_query_endpoint(request: RagQueryRequest) -> RagResult:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(val_err),
         ) from val_err
+    except LLMError as llm_err:
+        logger.exception("RAG LLM generation failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="RAG answer generation failed.",
+        ) from llm_err
+    except ModelGatewayError as gateway_err:
+        logger.exception("RAG model gateway failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="RAG answer generation failed.",
+        ) from gateway_err
+    except RagPipelineError as pipeline_err:
+        logger.exception("RAG evidence processing failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(pipeline_err),
+        ) from pipeline_err
     except Exception as exc:
+        logger.exception("Unexpected RAG query failure")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"RAG query processing failed: {exc}",
+            detail="RAG query processing failed.",
         ) from exc
 
 
@@ -82,17 +120,31 @@ async def ingest_file_endpoint(
         tmp_path = Path(tmp.name)
 
     try:
+        logger.info("Document ingestion started", extra={"document_filename": filename, "file_type": ext.lstrip(".")})
         doc_id = ingest_document(
             path=str(tmp_path),
             document_id=document_id,
             metadata={"original_filename": filename},
         )
+        logger.info("Document ingestion completed", extra={"document_id": doc_id, "document_filename": filename})
         return {
             "status": "success",
             "document_id": doc_id,
             "filename": filename,
             "file_type": ext.lstrip("."),
         }
+    except (FileNotFoundError, OSError, ValueError) as ingest_err:
+        logger.warning("Document ingestion rejected", extra={"document_filename": filename})
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document could not be ingested: {ingest_err}",
+        ) from ingest_err
+    except Exception as exc:
+        logger.exception("Unexpected document ingestion failure")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Document ingestion failed.",
+        ) from exc
     finally:
         if tmp_path.exists():
             try:

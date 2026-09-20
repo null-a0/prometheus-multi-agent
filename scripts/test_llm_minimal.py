@@ -16,8 +16,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from prometheus.config import settings
-from prometheus.llm.base import LLMConfigError, LLMProviderError
-from prometheus.llm.openrouter import OpenRouterClient
+from prometheus.models.gateway import ModelGateway
+from prometheus.models.providers.openrouter import OpenRouterProvider
+from prometheus.models.types import ModelGatewayError
 
 
 def mask_key(key: str) -> str:
@@ -49,25 +50,24 @@ def main() -> int:
         return 1
 
     # 2. Minimal generation test
-    client = OpenRouterClient(api_key=raw_key, model=model, base_url=base_url)
+    gateway = ModelGateway(
+        provider=OpenRouterProvider(api_key=raw_key, model=model, base_url=base_url)
+    )
     print("\nSending minimal generation request to OpenRouter...")
     try:
-        response = client.generate(
+        response = gateway.generate(
             prompt="Hello! Please reply with exactly: 'PROMETHEUS_ONLINE'.",
             system_prompt="You are a concise connectivity verification bot. Output only the requested token.",
             max_tokens=20,
         )
         print("\n[SUCCESS] Generation response received:")
-        print(f"  Response text: {response.strip()!r}")
+        print(f"  Response text: {response.generated_text.strip()!r}")
         print("\nOpenRouter client and Gemini model are fully operational.")
         return 0
 
-    except LLMConfigError as cfg_err:
-        print(f"\n[CONFIGURATION ERROR] {cfg_err}")
-        return 2
-    except LLMProviderError as prov_err:
-        print(f"\n[PROVIDER / API ERROR] (Status code: {prov_err.status_code})")
-        print(f"  Message: {prov_err.message}")
+    except ModelGatewayError as gateway_err:
+        print(f"\n[MODEL ERROR] ({gateway_err.category})")
+        print(f"  Message: {gateway_err}")
         print("\nTroubleshooting tips:")
         print("  - Check that the model name is supported on OpenRouter (e.g. google/gemini-2.0-flash-001)")
         print("  - Verify that your OpenRouter account has active credits / quota")

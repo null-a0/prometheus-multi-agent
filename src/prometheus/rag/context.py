@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
-from prometheus.rag.models import AcademicSourceRecord, SourceRecord
+from prometheus.rag.evidence import build_evidence
+from prometheus.rag.models import AcademicSourceRecord, Evidence, SourceRecord
 from prometheus.retrieval.sources.paper_record import PaperRecord
 
 
-def build_context(ranked_chunks: Sequence[dict]) -> tuple[str, list[SourceRecord]]:
-    """Format ranked candidate chunks into numbered context blocks and structured SourceRecords.
+def build_context(ranked_chunks: Sequence[Mapping[str, Any] | Evidence]) -> tuple[str, list[SourceRecord]]:
+    """Format evidence into numbered prompt blocks and structured citations.
 
     Parameters
     ----------
     ranked_chunks : Sequence[dict]
-        List of chunk dicts returned by the retrieval and reranking layer.
-        Expected keys: id, text, metadata, score (or rerank_score/final_score).
+        Typed evidence or legacy chunk dictionaries returned by retrieval and
+        reranking. Legacy dictionaries are converted before citation mapping.
 
     Returns
     -------
@@ -24,21 +26,28 @@ def build_context(ranked_chunks: Sequence[dict]) -> tuple[str, list[SourceRecord
     if not ranked_chunks:
         return "", []
 
+    evidence = [
+        item if isinstance(item, Evidence) else build_evidence([item])[0]
+        for item in ranked_chunks
+    ]
+    return build_context_from_evidence(evidence)
+
+
+def build_context_from_evidence(evidence: Sequence[Evidence]) -> tuple[str, list[SourceRecord]]:
+    """Build prompt context and citations from already-normalized evidence."""
     context_blocks: list[str] = []
     sources: list[SourceRecord] = []
 
-    for idx, chunk in enumerate(ranked_chunks, start=1):
-        metadata = chunk.get("metadata", {}) or {}
-        text = chunk.get("text", "").strip()
-        chunk_id = chunk.get("id", f"chunk-{idx}")
-        score = chunk.get("final_score", chunk.get("rerank_score", chunk.get("score")))
-
-        doc_id = metadata.get("document_id") or metadata.get("source_id") or metadata.get("project_id") or "unknown"
-        filename = metadata.get("filename") or metadata.get("url") or "document"
+    for idx, item in enumerate(evidence, start=1):
+        metadata = item.metadata
+        text = item.text.strip()
+        doc_id = item.document_id or "unknown"
+        filename = item.document_name or "document"
         file_type = metadata.get("file_type")
-        page_num = metadata.get("page_number")
+        page_num = item.page_number
         slide_num = metadata.get("slide_number")
         heading = metadata.get("heading")
+        score = item.final_score or item.reranker_score or item.retrieval_score
 
         # Build human-readable location tag
         location_parts = []
@@ -65,7 +74,7 @@ def build_context(ranked_chunks: Sequence[dict]) -> tuple[str, list[SourceRecord
                 page_number=page_num,
                 slide_number=slide_num,
                 heading=heading,
-                chunk_id=str(chunk_id),
+                chunk_id=str(item.chunk_id or item.evidence_id or f"chunk-{idx}"),
                 score=float(score) if score is not None else None,
                 text_snippet=text,
             )

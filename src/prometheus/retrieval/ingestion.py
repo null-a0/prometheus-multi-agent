@@ -8,6 +8,7 @@ Covers both data sources described in the proposal:
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,8 @@ from sentence_transformers import SentenceTransformer
 
 from prometheus.retrieval import hybrid_search
 from prometheus.retrieval.vector_store import get_vector_store
+
+logger = logging.getLogger(__name__)
 
 # Pinned embedding model: small, fast, good enough for Phase 1-2 dev.
 # Revisit alongside the reranker model choice once quality tuning starts.
@@ -118,6 +121,7 @@ def ingest_document(
 
     Returns the document_id used.
     """
+    logger.info("Document ingestion started", extra={"path": str(path), "document_id": document_id})
     from prometheus.retrieval.parsers import parse_document
 
     parsed = parse_document(path, document_id=document_id)
@@ -126,6 +130,7 @@ def ingest_document(
     # Chunk while preserving page/slide numbers
     section_chunks = chunk_sections(parsed.sections)
     if not section_chunks:
+        logger.info("Document ingestion completed with no text chunks", extra={"document_id": doc_id})
         return doc_id
 
     texts = [sc["text"] for sc in section_chunks]
@@ -157,6 +162,10 @@ def ingest_document(
 
     get_vector_store().add(records)
     hybrid_search.add_to_bm25(records)
+    logger.info(
+        "Document ingestion completed",
+        extra={"document_id": doc_id, "chunk_count": len(records)},
+    )
     return doc_id
 
 

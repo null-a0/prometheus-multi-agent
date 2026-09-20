@@ -34,6 +34,12 @@ def generate_answer(
     client: BaseLLMClient | None = None,
 ) -> str:
     """Convenience helper to generate an answer from a question and context."""
-    active_client = client or get_llm_client()
+    from prometheus.models.gateway import LegacyClientProvider, ModelGateway, get_model_gateway
+
     prompt = f"Context Information:\n{context}\n\nQuestion: {question}\n\nAnswer:"
-    return active_client.generate(prompt=prompt, system_prompt=system_prompt)
+    gateway = (
+        ModelGateway(provider=LegacyClientProvider(client))
+        if client is not None
+        else get_model_gateway()
+    )
+    return gateway.generate(prompt=prompt, system_prompt=system_prompt).generated_text

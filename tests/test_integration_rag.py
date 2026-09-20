@@ -9,8 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from prometheus.rag.pipeline import query_rag
-from prometheus.retrieval.ingestion import ingest_document
+pytestmark = [pytest.mark.integration, pytest.mark.model_backed, pytest.mark.live_provider]
 
 
 @pytest.mark.skipif(
@@ -18,6 +17,9 @@ from prometheus.retrieval.ingestion import ingest_document
     reason="OPENROUTER_API_KEY is not set in environment.",
 )
 def test_live_openrouter_rag_query(tmp_path: Path):
+    from prometheus.rag.pipeline import query_rag
+    from prometheus.retrieval.ingestion import ingest_document
+
     doc_path = tmp_path / "live_doc.txt"
     doc_path.write_text(
         "Prometheus is a NotebookLM-like research system created to empower deep scientific investigation.\n\n"

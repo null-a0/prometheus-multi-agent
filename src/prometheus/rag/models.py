@@ -3,7 +3,28 @@ Pydantic data contracts for the Prometheus RAG generation layer.
 """
 from __future__ import annotations
 
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
+
+from prometheus.routing.models import RoutingMetadata
+
+
+class Evidence(BaseModel):
+    """One retrieved passage with provenance and ranking information."""
+
+    evidence_id: str | None = Field(default=None, description="Stable identifier for the retrieved evidence item.")
+    document_id: str | None = Field(default=None, description="Identifier of the source document, when available.")
+    document_name: str | None = Field(default=None, description="Source document name, when available.")
+    chunk_id: str | None = Field(default=None, description="Identifier of the retrieved chunk, when available.")
+    text: str = Field(description="Retrieved evidence text.")
+    page_number: int | None = Field(default=None, description="1-based source page, when available.")
+    source_type: str | None = Field(default=None, description="Source classification, when available.")
+    retrieval_method: str | None = Field(default=None, description="Retrieval path used to produce this item.")
+    retrieval_score: float | None = Field(default=None, description="Fusion or retrieval score, when available.")
+    reranker_score: float | None = Field(default=None, description="Cross-encoder reranker score, when available.")
+    final_score: float | None = Field(default=None, description="Final score after ranking filters, when available.")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional non-sensitive provenance metadata.")
 
 
 class SourceRecord(BaseModel):
@@ -39,6 +60,18 @@ class RagResult(BaseModel):
     """Complete response returned by the Prometheus RAG pipeline."""
 
     answer: str = Field(description="Factually grounded answer synthesized by the LLM.")
+    routing: RoutingMetadata | None = Field(
+        default=None,
+        description="Concise task-routing metadata for this request.",
+    )
+    citations: list[SourceRecord] = Field(
+        default_factory=list,
+        description="Citation records mapped to the evidence items used in the answer.",
+    )
+    evidence: list[Evidence] = Field(
+        default_factory=list,
+        description="Evidence items retrieved and made available to answer generation.",
+    )
     sources: list[SourceRecord] = Field(default_factory=list, description="List of local document source attributions.")
     academic_sources: list[AcademicSourceRecord] = Field(
         default_factory=list,
@@ -48,6 +81,10 @@ class RagResult(BaseModel):
     has_sufficient_context: bool = Field(
         default=True,
         description="False if the retrieval step yielded no evidence or if the context was insufficient.",
+    )
+    evidence_status: Literal["no_evidence", "insufficient_evidence", "sufficient"] = Field(
+        default="sufficient",
+        description="Whether retrieval produced no evidence, insufficient evidence, or sufficient context.",
     )
 
 

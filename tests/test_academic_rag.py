@@ -27,8 +27,9 @@ from prometheus.llm.mock import MockLLMClient
 from prometheus.rag.context import build_academic_context, build_context
 from prometheus.rag.pipeline import query_rag
 from prometheus.rag.prompts import build_rag_user_prompt
-from prometheus.retrieval.ingestion import ingest_document
 from prometheus.retrieval.sources.paper_record import PaperRecord
+
+pytestmark = pytest.mark.unit
 
 
 def _isolate_stores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -74,7 +75,11 @@ def sample_papers() -> list[PaperRecord]:
 # 1. Academic Evidence Disabled by Default
 # ---------------------------------------------------------------------------
 
+@pytest.mark.integration
+@pytest.mark.model_backed
 def test_academic_evidence_disabled_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from prometheus.retrieval.ingestion import ingest_document
+
     _isolate_stores(tmp_path, monkeypatch)
 
     doc_path = tmp_path / "sample.txt"
@@ -98,11 +103,15 @@ def test_academic_evidence_disabled_by_default(tmp_path: Path, monkeypatch: pyte
 # 2. Academic Evidence Enabled Queries OpenAlex
 # ---------------------------------------------------------------------------
 
+@pytest.mark.integration
+@pytest.mark.model_backed
 def test_academic_evidence_enabled_queries_openalex(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     sample_papers: list[PaperRecord],
 ):
+    from prometheus.retrieval.ingestion import ingest_document
+
     _isolate_stores(tmp_path, monkeypatch)
 
     doc_path = tmp_path / "sample.txt"
@@ -164,7 +173,13 @@ def test_build_academic_context_empty():
 # 4. Graceful Degradation on Empty OpenAlex Results
 # ---------------------------------------------------------------------------
 
-def test_academic_evidence_empty_results_handled_gracefully(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.integration
+@pytest.mark.model_backed
+def test_academic_evidence_empty_results_handled_gracefully(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from prometheus.retrieval.ingestion import ingest_document
+
     _isolate_stores(tmp_path, monkeypatch)
 
     doc_path = tmp_path / "sample.txt"
@@ -188,11 +203,15 @@ def test_academic_evidence_empty_results_handled_gracefully(tmp_path: Path, monk
 # 5. Graceful Degradation on OpenAlex Network / HTTP Errors
 # ---------------------------------------------------------------------------
 
+@pytest.mark.integration
+@pytest.mark.model_backed
 def test_academic_evidence_http_error_falls_back_to_local_rag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ):
+    from prometheus.retrieval.ingestion import ingest_document
+
     _isolate_stores(tmp_path, monkeypatch)
 
     doc_path = tmp_path / "sample.txt"
@@ -269,11 +288,15 @@ def test_prompt_without_academic_evidence_preserves_legacy_format():
 # 7. Document Isolation Preserved with Academic Evidence
 # ---------------------------------------------------------------------------
 
+@pytest.mark.integration
+@pytest.mark.model_backed
 def test_document_scoping_preserved_with_academic_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     sample_papers: list[PaperRecord],
 ):
+    from prometheus.retrieval.ingestion import ingest_document
+
     _isolate_stores(tmp_path, monkeypatch)
 
     doc1 = tmp_path / "paper_alpha.txt"
@@ -302,11 +325,15 @@ def test_document_scoping_preserved_with_academic_evidence(
 # 8. API Endpoint Supports Academic Parameters
 # ---------------------------------------------------------------------------
 
+@pytest.mark.integration
+@pytest.mark.model_backed
 def test_api_endpoint_supports_academic_parameters(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     sample_papers: list[PaperRecord],
 ):
+    from prometheus.retrieval.ingestion import ingest_document
+
     _isolate_stores(tmp_path, monkeypatch)
 
     doc = tmp_path / "api_doc.txt"

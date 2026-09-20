@@ -10,7 +10,7 @@ prometheus.retrieval.hybrid_search, once report volume justifies it.
 """
 from __future__ import annotations
 
-from sqlalchemy import select, or_
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from prometheus.config import settings
